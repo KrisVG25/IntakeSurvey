@@ -1,32 +1,32 @@
 import streamlit as st
-import json
 
 # --- Page Configuration ---
-# Sets the title and layout of the page.
 st.set_page_config(
     page_title="VG Intake Form",
     layout="wide"
 )
 
-# --- Welcome Screen ---
-# Recreates the welcome screen from your Typeform.
-st.image(
-    "https://images.typeform.com/images/9GdDxLJcuvbz",
-    width=200,
-)
-st.title("Internal Intake Tool")
-st.markdown("""
-*This is a testing version tool meant for internal use of Vista Grande employees to use for generating a CCA questionnaire.*
+# --- Initialize Session State ---
+# This is the magic that remembers which step we are on and stores data.
+if 'step' not in st.session_state:
+    st.session_state.step = 0
 
-*If you are using this for a project, feedback on the quality and appropriateness of the resulting questionnaire would be greatly appreciated.*
+# --- Navigation Functions ---
+def next_step():
+    # To save the data from subcategory inputs, we process it before moving on.
+    if st.session_state.step == 1:
+        # Basic validation for step 1
+        num_cats = int(st.session_state.get("num_subcategories", 0))
+        for i in range(num_cats):
+            if not st.session_state[f"cat_name_{i}"]:
+                st.warning(f"Please enter a name for Category {i+1} before proceeding.")
+                return # Stop the function if validation fails
+    st.session_state.step += 1
 
-Please send any you may have to Kristina, or document into the feedback area [here](https://docs.google.com/document/d/1nP_0AabzAs7lsI85FWhXyxuzzPH6mGvf-tLtJa5ykvs/edit?tab=t.e48co6y0d7g6#heading=h.2gou1iavuljp).
-""")
-
-st.divider()
+def prev_step():
+    st.session_state.step -= 1
 
 # --- Data for Selectors ---
-# Pre-defined lists for dropdowns and multi-select boxes.
 regions = ["USA", "Canada", "Mexico", "UK"]
 macro_categories = ["OTC & Wellness", "Personal Care & Beauty", "Food Storage", "Packaged Food & Drink", "Pet", "Cleaning"]
 channels = [
@@ -51,174 +51,128 @@ special_topics = [
     "Medical Conditions – Profile any relevant health conditions for dietary or medical insights."
 ]
 
-# --- Form Definition ---
-# Using st.form() allows users to fill everything out and submit once.
-with st.form("vg_intake_form"):
-    st.header("Project Details")
-    
-    # --- Project Background Section ---
-    email = st.text_input(
-        "Email",
-        help="The resulting questionnaire from this form will be sent here."
-    )
 
-    st.subheader("General Project Background")
-    client_name = st.text_input("Client Name (ex. Vital Farms)")
-    
-    # Using columns for a cleaner layout
+# ==============================================================================
+# STEP 0: GENERAL PROJECT BACKGROUND
+# ==============================================================================
+if st.session_state.step == 0:
+    st.image("https://images.typeform.com/images/9GdDxLJcuvbz", width=200)
+    st.title("Step 1: General Project Background")
+    st.info("Let's start with the basics of your project.")
+
+    st.text_input("Email", key="email")
+    st.text_input("Client Name (ex. Vital Farms)", key="client_name")
+
     col1, col2 = st.columns(2)
     with col1:
-        region = st.selectbox("Region", options=regions, index=None, placeholder="Select a region...")
+        st.selectbox("Region", options=regions, index=None, placeholder="Select a region...", key="region")
     with col2:
-        macro_category = st.selectbox(
-            "Macro-category",
-            options=macro_categories,
-            help="The broader industry context of the category included",
-            index=None,
-            placeholder="Select a macro-category..."
-        )
+        st.selectbox("Macro-category", options=macro_categories, index=None, placeholder="Select a macro-category...", key="macro_category")
 
-    num_subcategories = st.radio(
-        "Number of subcategories",
+    st.radio(
+        "Number of subcategories to include in the study?",
         options=["1", "2", "3", "4"],
-        help="Subcategory = a distinct qualification cell/shopping path/products with different attributes. *Current support only a max of 4",
+        key="num_subcategories",
         horizontal=True
     )
-
-    # Conditionally show the Overall Study Category Name
-    if num_subcategories and int(num_subcategories) > 1:
-        overall_category_name = st.text_input(
-            "Overall Study Category Name",
-            help='You mentioned the study will include several subcategories. What will they all together be referred to? Ex. "Oral Care" - that covers toothbrushes & toothpaste'
-        )
+    
+    # Basic validation before allowing user to proceed
+    if st.session_state.get("client_name") and st.session_state.get("region"):
+        st.button("Next: Category Details", on_click=next_step, type="primary")
     else:
-        overall_category_name = ""
+        st.warning("Please fill in Client Name and Region to continue.")
 
-    st.divider()
+# ==============================================================================
+# STEP 1: DYNAMIC CATEGORY INFORMATION
+# ==============================================================================
+elif st.session_state.step == 1:
+    st.title("Step 2: Subcategory Information")
+    st.info("Now, provide the details for each of the subcategories you selected.")
 
-    # --- Conditional Subcategory Sections ---
-    # These sections will appear based on the "Number of subcategories" selection.
-    st.header("Subcategory Information")
+    # Get the number of categories from the previous step. Default to 1 if not set.
+    num_categories = int(st.session_state.get("num_subcategories", 1))
 
-    # This dictionary will hold the data for each subcategory
-    category_data = {}
+    # This loop dynamically creates the input fields.
+    for i in range(num_categories):
+        with st.expander(f"Details for Category {i + 1}", expanded=True):
+            st.text_input(f"Category Name (ex. Butter)", key=f"cat_name_{i}")
+            st.text_input(f"Sample Size (ex. 3,000)", key=f"cat_sample_{i}")
+            st.text_area(f"What are the categories needed to have shopped to qualify for this category?", key=f"cat_qualify_{i}", help="Ex. Butter, Oil, Margarine")
+            st.text_area(f"Category Attribute List", key=f"cat_attributes_{i}", help="Ex. If the category is Bacon, you might put: Brand, Type, Package Size, Flavor, Salt Level")
 
-    # Category A (always visible if a number is selected)
-    if num_subcategories:
-        with st.expander("Category A Information", expanded=True):
-            cat_a_name = st.text_input("Category Name (ex. Butter)", key="cat_a_name")
-            cat_a_sample = st.text_input("Sample Size (ex. 3,000)", key="cat_a_sample")
-            cat_a_qualify = st.text_area("What are the categories needed to have shopped to qualify for this category? (ex. Butter, Oil, Margarine)", key="cat_a_qualify")
-            cat_a_attributes = st.text_area("Category Attribute List (ex. Brand, Type, Package Size, Flavor, Salt Level)", key="cat_a_attributes")
-            category_data['A'] = {
-                'name': cat_a_name, 'sample_size': cat_a_sample,
-                'qualifiers': cat_a_qualify, 'attributes': cat_a_attributes
-            }
+    # Navigation buttons
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        st.button("Back: Project Background", on_click=prev_step)
+    with col2:
+        st.button("Next: Study Settings", on_click=next_step, type="primary")
 
-    # Category B
-    if num_subcategories and int(num_subcategories) >= 2:
-        with st.expander("Category B Information", expanded=True):
-            cat_b_name = st.text_input("Category Name (ex. Butter)", key="cat_b_name")
-            cat_b_sample = st.text_input("Sample Size (ex. 3,000)", key="cat_b_sample")
-            cat_b_qualify = st.text_area("What are the categories needed to have shopped to qualify for this category? (ex. Butter, Oil, Margarine)", key="cat_b_qualify")
-            cat_b_attributes = st.text_area("Category Attribute List (ex. Brand, Type, Package Size, Flavor, Salt Level)", key="cat_b_attributes")
-            category_data['B'] = {
-                'name': cat_b_name, 'sample_size': cat_b_sample,
-                'qualifiers': cat_b_qualify, 'attributes': cat_b_attributes
-            }
+# ==============================================================================
+# STEP 2: STUDY SETTINGS
+# ==============================================================================
+elif st.session_state.step == 2:
+    st.title("Step 3: Study Settings")
+    st.info("Finally, let's configure the specific content of the study.")
 
-    # Category C
-    if num_subcategories and int(num_subcategories) >= 3:
-        with st.expander("Category C Information", expanded=True):
-            cat_c_name = st.text_input("Category Name (ex. Butter)", key="cat_c_name")
-            cat_c_sample = st.text_input("Sample Size (ex. 3,000)", key="cat_c_sample")
-            cat_c_qualify = st.text_area("What are the categories needed to have shopped to qualify for this category? (ex. Butter, Oil, Margarine)", key="cat_c_qualify")
-            cat_c_attributes = st.text_area("Category Attribute List (ex. Brand, Type, Package Size, Flavor, Salt Level)", key="cat_c_attributes")
-            category_data['C'] = {
-                'name': cat_c_name, 'sample_size': cat_c_sample,
-                'qualifiers': cat_c_qualify, 'attributes': cat_c_attributes
-            }
+    st.radio("Study requires a hispanic/spanish language screener?", options=["Yes", "No"], index=None, key="hispanic_screener")
+    st.multiselect("Channels to Include", options=channels, key="included_channels")
+    st.multiselect("Special Sections to Include", options=special_sections, key="included_sections")
+    st.multiselect("Special Question Topics to Include", options=special_topics, key="included_topics")
+    st.text_area("Describe any other specific business questions to address in the study, or skip.", key="other_questions")
+    st.slider("Adjust the amount of AI suggestions you would like inserted.", min_value=1, max_value=5, value=3, key="ai_suggestions")
 
-    # Category D
-    if num_subcategories and int(num_subcategories) == 4:
-        with st.expander("Category D Information", expanded=True):
-            cat_d_name = st.text_input("Category Name (ex. Butter)", key="cat_d_name")
-            cat_d_sample = st.text_input("Sample Size (ex. 3,000)", key="cat_d_sample")
-            cat_d_qualify = st.text_area("What are the categories needed to have shopped to qualify for this category? (ex. Butter, Oil, Margarine)", key="cat_d_qualify")
-            cat_d_attributes = st.text_area("Category Attribute List (ex. Brand, Type, Package Size, Flavor, Salt Level)", key="cat_d_attributes")
-            category_data['D'] = {
-                'name': cat_d_name, 'sample_size': cat_d_sample,
-                'qualifiers': cat_d_qualify, 'attributes': cat_d_attributes
-            }
+    # Navigation buttons
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        st.button("Back: Category Details", on_click=prev_step)
+    with col2:
+        st.button("Next: Review & Submit", on_click=next_step, type="primary")
 
-    st.divider()
-
-    # --- Study Settings Section ---
-    st.header("Study Settings")
-    hispanic_screener = st.radio(
-        "Study requires a hispanic/spanish language screener?",
-        options=["Yes", "No"], index=None
-    )
+# ==============================================================================
+# STEP 3: REVIEW AND SUBMIT
+# ==============================================================================
+elif st.session_state.step == 3:
+    st.title("Step 4: Review and Submit")
+    st.success("You're all done! Please review your answers below before submitting.")
     
-    included_channels = st.multiselect("Channels to Include", options=channels)
-    
-    included_sections = st.multiselect(
-        "Special Sections to Include",
-        options=special_sections,
-        help="If selected, these sections will be added and initiated with their fundamental questions."
-    )
-    
-    included_topics = st.multiselect("Special Question Topics to Include", options=special_topics)
-    
-    other_questions = st.text_area(
-        "Describe any other specific business questions to address in the study, or skip.",
-        help="Ex. Want to know about specific claims and concerns around the health of the dairy (antibiotics, grass fed, etc.)"
-    )
-
-    ai_suggestions = st.slider(
-        "Adjust the amount of AI suggestions you would like inserted.",
-        min_value=1,
-        max_value=5,
-        value=3,
-        help="1 – Essentials Only (e.g. 5 suggestions added). 5 – Full Spectrum (e.g. 20 suggestions added)."
-    )
-
-    # --- Form Submission ---
-    submitted = st.form_submit_button("Submit Intake Form")
-
-
-# --- Post-Submission Logic ---
-# This block runs only after the user clicks the "Submit" button.
-if submitted:
-    # Basic validation check
-    if not client_name or not region or not macro_category or not num_subcategories:
-        st.error("Please fill out all required fields in the 'General Project Background' section.")
-    else:
-        # Collect all data into a dictionary
-        final_data = {
-            "email": email,
-            "client_name": client_name,
-            "region": region,
-            "macro_category": macro_category,
-            "num_subcategories": int(num_subcategories) if num_subcategories else 0,
-            "overall_category_name": overall_category_name,
-            "subcategory_details": category_data,
-            "study_settings": {
-                "hispanic_screener": hispanic_screener,
-                "included_channels": included_channels,
-                "special_sections": included_sections,
-                "special_topics": included_topics,
-                "other_business_questions": other_questions,
-                "ai_suggestion_level": ai_suggestions
-            }
+    # --- Collect all the data from session_state ---
+    final_data = {
+        "email": st.session_state.get("email"),
+        "client_name": st.session_state.get("client_name"),
+        "region": st.session_state.get("region"),
+        "macro_category": st.session_state.get("macro_category"),
+        "num_subcategories": int(st.session_state.get("num_subcategories", 0)),
+        "subcategory_details": [],
+        "study_settings": {
+            "hispanic_screener": st.session_state.get("hispanic_screener"),
+            "included_channels": st.session_state.get("included_channels"),
+            "special_sections": st.session_state.get("special_sections"),
+            "special_topics": st.session_state.get("included_topics"),
+            "other_business_questions": st.session_state.get("other_questions"),
+            "ai_suggestion_level": st.session_state.get("ai_suggestions")
         }
-        
-        # Display a success message similar to the Typeform "Thank You" screen
-        
-        st.success("Thank you for completing the intake form!")
-        st.balloons()
-        st.info(f"The questionnaire will be sent to **{email}**. This may take up to 5 minutes.")
+    }
 
-        # Display the collected data as a JSON object for verification
-        st.subheader("Collected Form Data (as JSON)")
-        st.json(final_data)
+    # Loop to gather the dynamic category data
+    num_cats = int(st.session_state.get("num_subcategories", 0))
+    for i in range(num_cats):
+        category_info = {
+            "name": st.session_state.get(f"cat_name_{i}"),
+            "sample_size": st.session_state.get(f"cat_sample_{i}"),
+            "qualifiers": st.session_state.get(f"cat_qualify_{i}"),
+            "attributes": st.session_state.get(f"cat_attributes_{i}")
+        }
+        final_data["subcategory_details"].append(category_info)
+
+    # Display the collected data for review
+    st.json(final_data)
+
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        st.button("Back: Study Settings", on_click=prev_step)
+    with col2:
+        if st.button("Submit Form", type="primary"):
+            st.balloons()
+            st.success("Form submitted successfully! Thank you.")
+            # Here you would add the logic to send an email, save to a database, etc.
+            # For now, we just show a success message.

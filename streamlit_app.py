@@ -24,41 +24,40 @@ def add_item(list_key):
 
 def remove_item(list_key, index):
     """Removes an item from a dynamic list in session state."""
-    st.session_state[list_key].pop(index)
-    # Also remove the corresponding widget's state to prevent errors
-    st.session_state.pop(f"{list_key}_{index}", None)
+    if len(st.session_state[list_key]) > 1:
+        st.session_state[list_key].pop(index)
+        # Clean up the corresponding widget's state from session_state
+        for i in range(len(st.session_state[list_key]), len(st.session_state[list_key]) + 2):
+            st.session_state.pop(f"{list_key}_{i}", None)
 
 
 def dynamic_text_list(label, list_key):
     """Creates a UI for a dynamic list of text inputs."""
     st.markdown(f"**{label}**")
     
-    # Initialize the list in session state if it doesn't exist
     if list_key not in st.session_state:
-        st.session_state[list_key] = [""] # Start with one empty item
+        st.session_state[list_key] = [""] 
 
-    # Display a text input for each item in the list
+    # This loop synchronizes the widget values back to our list on each rerun
+    for i in range(len(st.session_state[list_key])):
+        st.session_state[list_key][i] = st.session_state.get(f"{list_key}_{i}", "")
+
+    # This loop displays the actual widgets
     for i, item in enumerate(st.session_state[list_key]):
         col1, col2 = st.columns([10, 1])
         with col1:
-            # The key for each text_input must be unique
-            current_value = st.text_input(
+            st.text_input(
                 f"Item {i+1}", 
                 value=item, 
                 key=f"{list_key}_{i}", 
                 label_visibility="collapsed"
             )
-            # Update the list in session state with the new value from the text input
-            st.session_state[list_key][i] = current_value
         with col2:
-            # Only show remove button if there's more than one item
             if len(st.session_state[list_key]) > 1:
                 st.button("➖", key=f"remove_{list_key}_{i}", on_click=remove_item, args=(list_key, i))
 
-    # Add button to append a new item
     st.button("➕ Add Item", key=f"add_{list_key}", on_click=add_item, args=(list_key,))
-    st.write("---")
-
+    
 
 # ==============================================================================
 # STEP 0: GENERAL PROJECT BACKGROUND (Unchanged)
@@ -68,18 +67,10 @@ if st.session_state.step == 0:
     st.title("Step 1: General Project Background")
     st.info("Let's start with the basics of your project.")
 
-    st.text_input("Email", key="email", value=st.session_state.get("email", ""))
-    st.text_input("Client Name (ex. Vital Farms)", key="client_name", value=st.session_state.get("client_name", ""))
+    st.text_input("Email", key="email")
+    st.text_input("Client Name (ex. Vital Farms)", key="client_name")
     
-    # Pre-select previous answers if they exist
-    region_index = None
-    if "region" in st.session_state:
-        try:
-            region_index = ["USA", "Canada", "Mexico", "UK"].index(st.session_state.region)
-        except ValueError:
-            region_index = None # Handle case where stored value is no longer in the list
-
-    st.selectbox("Region", options=["USA", "Canada", "Mexico", "UK"], index=region_index, placeholder="Select a region...", key="region")
+    st.selectbox("Region", options=["USA", "Canada", "Mexico", "UK"], index=None, placeholder="Select a region...", key="region")
     st.selectbox("Macro-category", options=["OTC & Wellness", "Personal Care & Beauty", "Food Storage", "Packaged Food & Drink", "Pet", "Cleaning"], index=None, placeholder="Select a macro-category...", key="macro_category")
 
     st.radio("Number of subcategories to include in the study?", options=["1", "2", "3", "4"], key="num_subcategories", horizontal=True)
@@ -100,22 +91,39 @@ elif st.session_state.step == 1:
     num_categories = int(st.session_state.get("num_subcategories", 1))
 
     for i in range(num_categories):
-        with st.expander(f"Details for Category {i + 1}", expanded=True):
-            st.text_input(f"Category Name (ex. Butter)", key=f"cat_name_{i}")
-            st.text_input(f"Sample Size (ex. 3,000)", key=f"cat_sample_{i}")
-            
-            # --- MODIFIED SECTION ---
-            # Using the new dynamic_text_list function instead of st.text_area
-            dynamic_text_list(
-                label="What categories are needed to qualify? (ex. Butter, Oil, Margarine)",
-                list_key=f"cat_qualify_{i}"
-            )
-            dynamic_text_list(
-                label="Category Attribute List (ex. Brand, Type, Package Size)",
-                list_key=f"cat_attributes_{i}"
-            )
-            # --- END MODIFIED SECTION ---
+        # We add a clear separator and header for each category section
+        st.markdown("---")
+        category_name = st.session_state.get(f"cat_name_{i}", f"Category {i+1}")
+        header_text = f"**{category_name}**" if category_name != f"Category {i+1}" else f"**Category {i+1}**"
+        
+        # This toggle controls the visibility of the container and saves its state
+        is_expanded = st.toggle(
+            header_text, 
+            key=f"expander_state_{i}", 
+            value=st.session_state.get(f"expander_state_{i}", True) # Default to True
+        )
+        
+        # If the toggle is on, show the container with the input fields
+        if is_expanded:
+            with st.container(border=True):
+                st.text_input("Category Name (ex. Butter)", key=f"cat_name_{i}")
+                st.text_input("Sample Size (ex. 3,000)", key=f"cat_sample_{i}")
+                
+                st.markdown("---")
+                
+                dynamic_text_list(
+                    label="What categories are needed to qualify? (ex. Butter, Oil, Margarine)",
+                    list_key=f"cat_qualify_{i}"
+                )
+                
+                st.markdown("---")
+                
+                dynamic_text_list(
+                    label="Category Attribute List (ex. Brand, Type, Package Size)",
+                    list_key=f"cat_attributes_{i}"
+                )
 
+    st.markdown("---")
     col1, col2 = st.columns([1, 1])
     with col1:
         st.button("Back: Project Background", on_click=prev_step)
@@ -142,8 +150,9 @@ elif st.session_state.step == 2:
     with col2:
         st.button("Next: Review & Submit", on_click=next_step, type="primary")
 
+
 # ==============================================================================
-# STEP 3: REVIEW AND SUBMIT (MODIFIED)
+# STEP 3: REVIEW AND SUBMIT (Unchanged)
 # ==============================================================================
 elif st.session_state.step == 3:
     st.title("Step 4: Review and Submit")
@@ -168,20 +177,16 @@ elif st.session_state.step == 3:
 
     num_cats = int(st.session_state.get("num_subcategories", 0))
     for i in range(num_cats):
-        # --- MODIFIED SECTION ---
-        # Get the list of qualifiers, filtering out any empty strings
         qualifiers_list = [q for q in st.session_state.get(f"cat_qualify_{i}", []) if q]
-        # Get the list of attributes, filtering out any empty strings
         attributes_list = [a for a in st.session_state.get(f"cat_attributes_{i}", []) if a]
         
         category_info = {
             "name": st.session_state.get(f"cat_name_{i}"),
             "sample_size": st.session_state.get(f"cat_sample_{i}"),
-            "qualifiers": qualifiers_list, # This is now a clean list
-            "attributes": attributes_list  # This is also a clean list
+            "qualifiers": qualifiers_list,
+            "attributes": attributes_list
         }
         final_data["subcategory_details"].append(category_info)
-        # --- END MODIFIED SECTION ---
 
     st.json(final_data)
 
